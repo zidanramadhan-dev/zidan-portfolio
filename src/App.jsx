@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowUpRight,
   Mail,
@@ -97,15 +97,70 @@ function ParallaxSynthwave() {
   );
 }
 
+// ================= Little utilities =================
+function useVisibilityPause(audioRef) {
+  useEffect(() => {
+    const onVis = () => {
+      if (!audioRef.current) return;
+      if (document.hidden) audioRef.current.pause();
+      else if (!audioRef.current.muted) audioRef.current.play().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [audioRef]);
+}
+
+function Typewriter({ text, speed = 18, className = "" }) {
+  const [out, setOut] = useState("");
+  useEffect(() => {
+    let i = 0;
+    const id = setInterval(() => {
+      setOut((prev) => (i < text.length ? text.slice(0, ++i) : prev));
+      if (i >= text.length) clearInterval(id);
+    }, speed);
+    return () => clearInterval(id);
+  }, [text, speed]);
+  return (
+    <span className={className}>
+      {out}
+      <span className="ml-1 inline-block w-3 animate-pulse">_</span>
+    </span>
+  );
+}
+
 // ================= MAIN =================
-export default function App() {
+export default function Portfolio() {
   const [dark, setDark] = useState(true);
   const [crt, setCrt] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
+  const [soundOn, setSoundOn] = useState(false); // default muted to satisfy autoplay policies
+  const audioRef = useRef(null);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.classList.add("scroll-smooth");
   }, [dark]);
+
+  useVisibilityPause(audioRef);
+
+  const handleStart = () => {
+    setShowSplash(false);
+    if (audioRef.current && soundOn) {
+      audioRef.current.muted = false;
+      audioRef.current.play().catch(() => {});
+    }
+    // Scroll to hero smoothly
+    const hero = document.getElementById("home");
+    if (hero) hero.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (showSplash && (e.key === "Enter" || e.key === " ")) handleStart();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSplash]);
 
   const nav = [
     { id: "home", label: "HOME" },
@@ -118,20 +173,76 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,rgba(0,0,0,0.6),rgba(0,0,0,0.95))] text-neutral-100 antialiased relative">
-      {/* CRT overlay */}
+      {/* AUDIO (looping 8-bit synthwave — replace src with your own if desired) */}
+      <audio ref={audioRef} src="/audio/chiptune-loop.mp3" loop muted={!soundOn} preload="auto" />
+
+      {/* CRT overlay / chromatic aberration */}
       {crt && (
-        <div
-          aria-hidden
-          className="pointer-events-none fixed inset-0 z-[5] mix-blend-overlay"
-          style={{
-            background:
-              "repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px)",
-          }}
-        />
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-[5]">
+          <div
+            className="absolute inset-0 mix-blend-overlay"
+            style={{
+              background:
+                "repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px)",
+            }}
+          />
+          <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 120px rgba(0,0,0,0.6)" }} />
+        </div>
       )}
 
+      {/* Splash / Boot Intro */}
+      <AnimatePresence>
+        {showSplash && (
+          <motion.div
+            key="splash"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 grid place-items-center bg-black"
+            onClick={handleStart}
+          >
+            <div className="text-center select-none">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+                className="mb-8 font-arcade text-neon-cyan text-xl tracking-[0.3em]"
+              >
+                SYSTEM ONLINE_
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0.2, 1, 0.2] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
+                className="font-arcade text-neon-magenta text-sm tracking-[0.25em]"
+              >
+                PRESS ENTER TO START
+              </motion.div>
+              <div className="mt-8 flex items-center justify-center gap-3 text-xs text-neutral-400">
+                <button className="rounded-full border border-neutral-700 px-3 py-1.5 hover:text-white" onClick={(e)=>{e.stopPropagation(); setSoundOn((s)=>!s);}}>
+                  SOUND: {soundOn ? "ON" : "OFF"}
+                </button>
+                <span className="opacity-70">(click or press Enter)</span>
+              </div>
+            </div>
+            {/* subtle static */}
+            <motion.div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 mix-blend-overlay"
+              initial={{ backgroundPosition: "0 0" }}
+              animate={{ backgroundPosition: ["0 0", "0 8px", "0 0"] }}
+              transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(0deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 3px)",
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Nav */}
-      <header className="sticky top-0 z-50 border-b border-neutral-800/70 bg-neutral-950/70 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-neutral-800/70 bg-neutral-950/70 backdrop-blur">
         <Container className="flex h-16 items-center justify-between">
           <a href="#home" className="font-arcade text-[15px] tracking-[0.2em] text-white">
             ZIDAN // PORTFOLIO
@@ -154,6 +265,25 @@ export default function App() {
               title="Toggle CRT scanlines"
             >
               CRT {crt ? "ON" : "OFF"}
+            </button>
+            <button
+              onClick={() => setSoundOn((s) => {
+                const next = !s;
+                if (audioRef.current) {
+                  if (next) {
+                    audioRef.current.muted = false;
+                    audioRef.current.play().catch(()=>{});
+                  } else {
+                    audioRef.current.muted = true;
+                    audioRef.current.pause();
+                  }
+                }
+                return next;
+              })}
+              className="rounded-full border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-900"
+              title="Toggle audio"
+            >
+              🎵 {soundOn ? "ON" : "OFF"}
             </button>
             <button
               onClick={() => setDark((d) => !d)}
@@ -180,9 +310,11 @@ export default function App() {
               transition={{ duration: 0.6 }}
               className="font-arcade text-4xl sm:text-6xl leading-tight"
             >
-              <span className="text-neon-cyan">INSERT COIN</span> — I’m Zidan
+              <Typewriter text="INSERT COIN — I'm Zidan" />
               <br />
-              <span className="text-neon-magenta">Software Dev</span> & <span className="text-neon-cyan">AI</span>
+              <span className="text-neon-magenta"><Typewriter text="Software Dev" speed={22} /></span>
+              <span> & </span>
+              <span className="text-neon-cyan"><Typewriter text="AI Enthusiast" speed={22} /></span>
             </motion.h1>
             <p className="mt-5 max-w-xl text-neutral-300">
               Retro-game vibes, future tech stack: I build clean web/mobile apps and experiment with computer vision.
@@ -432,7 +564,7 @@ export default function App() {
       {/* Footer */}
       <footer className="border-t border-neutral-800 bg-neutral-950/70 py-10 text-sm text-neutral-400 backdrop-blur relative">
         <Container className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-          <p>© {new Date().getFullYear()} Zidan Ramadhan. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Zidan Ramadhan. All rights reserved. — build v2025-09-30-CRT</p>
           <div className="flex items-center gap-4">
             <a className="hover:text-white" href="#home">
               Back to top
@@ -443,7 +575,7 @@ export default function App() {
 
       {/* THEME EXTRAS: fonts + utility classes */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         .font-arcade{ font-family: 'Press Start 2P', system-ui, sans-serif; }
         .text-neon-cyan{ color: ${neon.primary}; text-shadow: 0 0 12px rgba(0,240,255,.5); }
         .text-neon-magenta{ color: ${neon.secondary}; text-shadow: 0 0 12px rgba(255,47,210,.5); }
